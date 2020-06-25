@@ -1,26 +1,44 @@
-FROM selenium/standalone-chrome
-
+FROM maven:3.6.3-jdk-11
 USER root
 
-################################################################################################################
-# Install JDK
-# https://github.com/docker-library/openjdk/blob/master/8-jdk/Dockerfile
-# Selenum is based on Xenial, so it is a bit different
-################################################################################################################
+ARG CHROME_VERSION="google-chrome-stable"
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+  && echo "deb http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list \
+  && apt-get update -qqy \
+  && apt-get -qqy install \
+    ${CHROME_VERSION:-google-chrome-stable} \
+  && rm /etc/apt/sources.list.d/google-chrome.list \
+  && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    bzip2 \
-    unzip \
-    xz-utils \
-  && rm -rf /var/lib/apt/lists/*
-
-# Default to UTF-8 file.encoding
-ENV LANG C.UTF-8
-
-FROM maven:3.6.3-jdk-11
+#=================================
+# Chrome Launch Script Wrapper
+#=================================
+COPY wrap_chrome_binary /opt/bin/wrap_chrome_binary
+RUN /opt/bin/wrap_chrome_binary
 
 USER seluser
 
-RUN mkdir /home/seluser/.m2
-VOLUME /home/seluser/.m2
+#============================================
+# Chrome webdriver
+#============================================
+# can specify versions by CHROME_DRIVER_VERSION
+# Latest released version will be used by default
+#============================================
+ARG CHROME_DRIVER_VERSION
+RUN if [ -z "$CHROME_DRIVER_VERSION" ]; \
+  then CHROME_MAJOR_VERSION=$(google-chrome --version | sed -E "s/.* ([0-9]+)(\.[0-9]+){3}.*/\1/") \
+    && CHROME_DRIVER_VERSION=$(wget --no-verbose -O - "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_MAJOR_VERSION}"); \
+  fi \
+  && echo "Using chromedriver version: "$CHROME_DRIVER_VERSION \
+  && wget --no-verbose -O /tmp/chromedriver_linux64.zip https://chromedriver.storage.googleapis.com/$CHROME_DRIVER_VERSION/chromedriver_linux64.zip \
+  && rm -rf /opt/selenium/chromedriver \
+  && unzip /tmp/chromedriver_linux64.zip -d /opt/selenium \
+  && rm /tmp/chromedriver_linux64.zip \
+  && mv /opt/selenium/chromedriver /opt/selenium/chromedriver-$CHROME_DRIVER_VERSION \
+  && chmod 755 /opt/selenium/chromedriver-$CHROME_DRIVER_VERSION \
+  && sudo ln -fs /opt/selenium/chromedriver-$CHROME_DRIVER_VERSION /usr/bin/chromedriver
+
+COPY generate_config /opt/bin/generate_config
+
+# Generating a default config during build time
+RUN /opt/bin/generate_config > /opt/selenium/config.json
