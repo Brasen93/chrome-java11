@@ -11,7 +11,3 @@ USER root
 COPY --from=maven /usr/local/openjdk-11 /usr/local/openjdk-11
 COPY --from=maven /usr/share/maven /usr/share/maven
 RUN ln -s /usr/share/maven/bin/mvn /usr/bin/mvn
-
-USER 1000
-
-
