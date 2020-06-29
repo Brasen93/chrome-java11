@@ -1,0 +1,15 @@
+#!/bin/bash
+
+XVFB_WHD=${XVFB_WHD:-1280x720x16}
+
+Xvfb :99 -ac -screen 0 $XVFB_WHD -nolisten tcp &
+xvfb=$!
+
+export DISPLAY=:99
+
+oldchrome --no-sandbox --disable-dev-shm-usage $@ &
+oldchrome=$!
+
+wait $oldchrome
+kill -9 $xvfb
+kill -9 $oldchrome
